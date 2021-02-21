@@ -1,47 +1,27 @@
 name: Deploy
-on: [push]
+on:
+  push:
+    branches:
+      - main
 jobs:
   build:
     name: Build and deploy
     runs-on: ubuntu-latest
     env:
-      OWNER: xakpro
-      REPO: websocket
+      OWNER: rendau
       IMAGE: websocket
-      SERVER_URI: user@ctogram.kz
     steps:
-      - name: Set up Go
-        uses: actions/setup-go@v1
-        with:
-          go-version: 1.13
-
       - name: Check out code into the Go module directory
         uses: actions/checkout@v2
 
       - name: Docker login
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          docker login -u $OWNER -p $GITHUB_TOKEN docker.pkg.github.com
+          echo ${{ secrets.CR_PAT }} | docker login -u $OWNER --password-stdin ghcr.io
 
       - name: Docker build
         run: |
-          docker build -t docker.pkg.github.com/$OWNER/$REPO/$IMAGE:latest .
+          docker build -t ghcr.io/$OWNER/$IMAGE:latest .
 
       - name: Docker push
         run: |
-          docker push docker.pkg.github.com/$OWNER/$REPO/$IMAGE:latest
-
-      - name: Deploy
-        env:
-          SERVER_SSH_KEY: ${{ secrets.server_ssh_key }}
-        run: |
-          echo "$SERVER_SSH_KEY" > server_ssh_key
-          chmod 0700 server_ssh_key
-          ssh -o StrictHostKeyChecking=no -i server_ssh_key $SERVER_URI "/home/user/refresh.sh"
-
-      - name: Notify to slack
-        run: |
-          curl -X POST \
-            --data-urlencode 'payload={"icon_emoji": ":tophat:", "username": "xakpro", "attachments": [{"color": "#36Faee", "title": "websocket", "text": "successfully deployed"}]}' \
-            https://hooks.slack.com/services/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
+          docker push ghcr.io/$OWNER/$IMAGE:latest
