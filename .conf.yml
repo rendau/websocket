@@ -1,5 +1,0 @@
-# conf_path: 'path to this file'
-debug: false
-http_listen: ':80'
-log_level: 'warn'
-usr_auth_url: 'url'

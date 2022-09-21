@@ -1,0 +1,67 @@
+definitions:
+  dopTypes.ErrRep:
+    properties:
+      desc:
+        type: string
+      error_code:
+        type: string
+      fields:
+        additionalProperties:
+          type: string
+        type: object
+    type: object
+  types.ConnectionCountRepSt:
+    properties:
+      value:
+        type: integer
+    type: object
+  types.SendReqSt:
+    properties:
+      message:
+        items:
+          type: integer
+        type: array
+      usr_ids:
+        items:
+          type: integer
+        type: array
+    type: object
+info:
+  contact: {}
+paths:
+  /connection_count:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.ConnectionCountRepSt'
+      tags:
+      - main
+  /register:
+    get:
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dopTypes.ErrRep'
+      tags:
+      - main
+  /send:
+    post:
+      parameters:
+      - description: body
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/types.SendReqSt'
+      responses:
+        "200":
+          description: OK
+      tags:
+      - main
+swagger: "2.0"

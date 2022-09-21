@@ -1,4 +1,4 @@
-package entities
+package types
 
 import (
 	"encoding/json"
@@ -12,7 +12,15 @@ type ConSt struct {
 	Out   chan []byte
 }
 
-type SendPars struct {
+type SendReqSt struct {
 	UsrIds  []int64         `json:"usr_ids"`
 	Message json.RawMessage `json:"message"`
+}
+
+type ConnectionCountRepSt struct {
+	Value int64 `json:"value"`
+}
+
+type JwtPayload struct {
+	Sub string `json:"sub"`
 }

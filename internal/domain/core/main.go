@@ -1,39 +1,55 @@
 package core
 
 import (
-	"context"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/rendau/websocket/internal/domain/entities"
-	"github.com/rendau/websocket/internal/domain/errs"
+	"github.com/rendau/dop/adapters/jwt"
+	"github.com/rendau/dop/dopErrs"
+	"github.com/rendau/websocket/internal/domain/types"
 )
 
-func (c *St) ConRegister(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+func (c *St) ConRegister(w http.ResponseWriter, r *http.Request, token string) error {
 	var err error
 
-	ses := c.ContextGetSession(ctx)
-	if err = c.SesRequireAuth(ses); err != nil {
+	tokenValid, err := c.jwk.Validate(token)
+	if err != nil {
 		return err
+	}
+	if !tokenValid {
+		return dopErrs.NotAuthorized
+	}
+
+	jwtPayload := &types.JwtPayload{}
+
+	err = jwt.ParsePayload(token, jwtPayload)
+	if err != nil {
+		return dopErrs.NotAuthorized
+	}
+
+	usrId, _ := strconv.ParseInt(jwtPayload.Sub, 10, 64)
+	if usrId <= 0 {
+		return dopErrs.NotAuthorized
 	}
 
 	wsCon, err := c.wsUpgrader.Upgrade(w, r, nil)
 	if err != nil {
 		c.lg.Errorw("Fail to upgrade websocket", err)
-		return errs.ServiceNA
+		return dopErrs.ServiceNA
 	}
 
 	c.consMU.Lock()
 	defer c.consMU.Unlock()
 
-	con := &entities.ConSt{
+	con := &types.ConSt{
 		Con:   wsCon,
-		UsrId: ses.ID,
+		UsrId: usrId,
 		Out:   make(chan []byte, 50),
 	}
 
-	c.cons = append(c.cons, con)
+	c.cons[usrId] = con
 
 	go c.conWriter(con)
 	go c.conReader(con)
@@ -41,7 +57,7 @@ func (c *St) ConRegister(ctx context.Context, w http.ResponseWriter, r *http.Req
 	return nil
 }
 
-func (c *St) Send(pars *entities.SendPars) {
+func (c *St) Send(pars *types.SendReqSt) {
 	if len(pars.UsrIds) == 0 {
 		return
 	}
@@ -58,33 +74,28 @@ func (c *St) Send(pars *entities.SendPars) {
 	}
 }
 
-func (c *St) GetConnectionCount() int64 {
+func (c *St) GetConnectionCount() types.ConnectionCountRepSt {
 	c.consMU.RLock()
 	defer c.consMU.RUnlock()
 
-	return int64(len(c.cons))
+	return types.ConnectionCountRepSt{Value: int64(len(c.cons))}
 }
 
-func (c *St) conUnregister(con *entities.ConSt) {
+func (c *St) conUnregister(con *types.ConSt) {
 	c.consMU.Lock()
 	defer c.consMU.Unlock()
 
 	_ = con.Con.Close()
 
-	newCons := make([]*entities.ConSt, 0, len(c.cons))
+	usrId := con.UsrId
 
-	for _, c := range c.cons {
-		if c == con {
-			close(c.Out)
-		} else {
-			newCons = append(newCons, c)
-		}
+	if con := c.cons[usrId]; con != nil {
+		close(con.Out)
+		delete(c.cons, usrId)
 	}
-
-	c.cons = newCons
 }
 
-func (c *St) conWriter(con *entities.ConSt) {
+func (c *St) conWriter(con *types.ConSt) {
 	var err error
 	var msg []byte
 	var ok bool
@@ -114,7 +125,7 @@ func (c *St) conWriter(con *entities.ConSt) {
 	}
 }
 
-func (c *St) conWriteMsg(con *entities.ConSt, tp int, msg []byte) error {
+func (c *St) conWriteMsg(con *types.ConSt, tp int, msg []byte) error {
 	err := con.Con.SetWriteDeadline(time.Now().Add(30 * time.Second))
 	if err != nil {
 		c.lg.Errorw("Fail to set timeout for ws-write", err)
@@ -124,7 +135,7 @@ func (c *St) conWriteMsg(con *entities.ConSt, tp int, msg []byte) error {
 	return con.Con.WriteMessage(tp, msg)
 }
 
-func (c *St) conReader(con *entities.ConSt) {
+func (c *St) conReader(con *types.ConSt) {
 	var err error
 
 	defer c.conUnregister(con)
@@ -138,6 +149,6 @@ func (c *St) conReader(con *entities.ConSt) {
 		if _, _, err = con.Con.ReadMessage(); err != nil {
 			break
 		}
-		c.lg.Info("reading")
+		// c.lg.Infow("Read")
 	}
 }
