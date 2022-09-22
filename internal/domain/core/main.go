@@ -14,24 +14,9 @@ import (
 func (c *St) ConRegister(w http.ResponseWriter, r *http.Request, token string) error {
 	var err error
 
-	tokenValid, err := c.jwk.Validate(token)
+	usrId, err := c.tokenValidateAndGetUsrId(token)
 	if err != nil {
 		return err
-	}
-	if !tokenValid {
-		return dopErrs.NotAuthorized
-	}
-
-	jwtPayload := &types.JwtPayload{}
-
-	err = jwt.ParsePayload(token, jwtPayload)
-	if err != nil {
-		return dopErrs.NotAuthorized
-	}
-
-	usrId, _ := strconv.ParseInt(jwtPayload.Sub, 10, 64)
-	if usrId <= 0 {
-		return dopErrs.NotAuthorized
 	}
 
 	wsCon, err := c.wsUpgrader.Upgrade(w, r, nil)
@@ -79,6 +64,34 @@ func (c *St) GetConnectionCount() types.ConnectionCountRepSt {
 	defer c.consMU.RUnlock()
 
 	return types.ConnectionCountRepSt{Value: int64(len(c.cons))}
+}
+
+func (c *St) tokenValidateAndGetUsrId(token string) (int64, error) {
+	if token == "" {
+		return 0, dopErrs.NotAuthorized
+	}
+
+	tokenValid, err := c.jwk.Validate(token)
+	if err != nil {
+		return 0, dopErrs.NotAuthorized
+	}
+	if !tokenValid {
+		return 0, dopErrs.NotAuthorized
+	}
+
+	jwtPayload := &types.JwtPayload{}
+
+	err = jwt.ParsePayload(token, jwtPayload)
+	if err != nil {
+		return 0, dopErrs.NotAuthorized
+	}
+
+	usrId, _ := strconv.ParseInt(jwtPayload.Sub, 10, 64)
+	if usrId <= 0 {
+		return 0, dopErrs.NotAuthorized
+	}
+
+	return usrId, nil
 }
 
 func (c *St) conUnregister(con *types.ConSt) {
